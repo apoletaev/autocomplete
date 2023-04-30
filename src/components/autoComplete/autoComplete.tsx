@@ -1,44 +1,61 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useEffect, useState, useRef, SetStateAction} from 'react';
 
 import { useOnClickOutside} from '../../hooks/useOnClickOutside';
-import { getData } from '../../utils/getData';
+import { useDebounce } from '../../hooks/useDebounce';
+import { useFetchData } from '../../utils/useFetchData';
 import { dataNormalize } from '../../utils/dataNormalize';
 import { highlightText } from "../../utils/highlightText";
 
 import './autoComplete.css';
 
-export const AutoComplete = () => {
-    const [country, setCountry] = useState<string>('')
-    const [data, setData] = useState<string[]>([])
+// TODO: check keyboard controls
+// TODO: replace loading text with loader image
+// TODO: check if animations and translations are needed
+// TODO: modify input to accept strings only
+
+type AutocompleteProps = {
+    value: string
+    onChange: React.Dispatch<SetStateAction<string>>
+}
+
+export const AutoComplete = ({value, onChange}:AutocompleteProps) => {
     const [isSelected, setIsSelected]=useState<boolean>(false)
 
-    useEffect(()=> {
-        if(country){
-            const fetchData = async () =>{
-                const data = await getData(`https://restcountries.com/v3.1/name/${country}?fields=name`);
+    const {data, isError, isLoading, executeFetchData, clearData, clearError} = useFetchData()
 
-                setData(dataNormalize(data, country));
+    const debouncedCountry = useDebounce(value, 500);
+
+    useEffect(
+        () => {
+            // Make sure we have a value (user has entered something in input)
+            if (debouncedCountry && !isSelected) {
+                executeFetchData(`https://restcountries.com/v3.1/name/${debouncedCountry.toLowerCase()}?fields=name`)
+            } else {
+                clearData();
+                clearError();
             }
+        },
+        // eslint-disable-next-line
+        [debouncedCountry]
+    );
 
-            fetchData();
-        } else {
-            setData([]);
-        }
-    },[country])
+    const dataNormalized = dataNormalize(data, value);
 
     const ref = useRef<HTMLInputElement>(null)
     const handleClear = () => {
-        setCountry('');
+        onChange('');
 
         setIsSelected(false);
+
+        clearData();
     }
 
     const selectHandler = (result: string) => {
-        setCountry(result);
+        onChange(result);
 
         setIsSelected(true);
 
-        setData([]);
+        clearData();
     }
 
     useOnClickOutside({ref, handler: isSelected ? () => {} : handleClear})
@@ -47,35 +64,32 @@ export const AutoComplete = () => {
         <div className='root' ref={ref}>
             <form className='form'>
                 <input
-                    className={`input ${!!data.length && 'input-active'}`}
+                    className={`input ${!!dataNormalized.length && 'input-active'}`}
                     type="text"
-                    value={country}
+                    value={value}
                     onChange={e => {
-                        setCountry(e.target.value)
-
-                        if(isSelected){
-                            setIsSelected(false)
-                        }
+                        onChange(e.target.value);
                     }}
                     placeholder="Country"
                     required
                     data-testid='input'
                 />
-                {(country || isSelected) && <button type='button' className='clear' onClick={handleClear}>x</button>}
+                {(value || isSelected) && <button type='button' className='clear' onClick={handleClear}>x</button>}
             </form>
 
-            {!!data.length && (
+            {!!dataNormalized.length && (
                 <div className='list-wrapper'>
                     <ul className='list'>
-                        {data.map((result, index) => (
+                        {dataNormalized.map((result: string, index: number) => (
                             <li key={`list-item-${index}`} className='list-item' onClick={() => selectHandler(result)}>
-                                {highlightText(result, country, 'highlight')}
+                                {highlightText(result, value, 'highlight')}
                             </li>
                         ))}
                     </ul>
                 </div>
                 )}
-            {!data.length && country && !isSelected && (<div className='message'>Country not found</div>)}
+            {isLoading && (<div className='message'>Loading...</div>)}
+            {!isLoading && isError && (<div className='message'>Country not found</div>)}
         </div>
     )
 }

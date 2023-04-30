@@ -1,6 +1,11 @@
 
 export const dataNormalize = (data: any[], country: string) => {
-    // also cleans api non-relevant data
-    return data.filter((item: { name: { common: string; }; }) => item?.name?.common?.toLowerCase().includes(country))
-        .map((i:{ name: { common: string; };}) => i?.name?.common);
+    // also cleans api mistakes and non-relevant data
+    return data?.reduce((acc, curValue)=>{
+        if(curValue?.name?.common?.toLowerCase().includes(country.toLowerCase())){
+          acc.push(curValue.name.common);
+        }
+
+        return acc;
+    }, []);
 }
